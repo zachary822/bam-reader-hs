@@ -1,7 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Bam (extractBzgf) where
+module Data.Bam (
+  extractBzgf,
+  bin2code,
+) where
 
 import Codec.Compression.Zlib.Raw
 import Control.Monad
@@ -141,9 +144,9 @@ codeMap :: B.ByteString
 codeMap = "=ACMGRSVTWYHKDBN"
 
 bin2code :: (Integral a) => BL.ByteString -> a -> BL.ByteString
-bin2code bin len = if odd len then maybe "" fst (BL.unsnoc code) else code
+bin2code bin len = BL.take (fromIntegral len) code
  where
-  code = BL.foldr' convert "" bin
+  code = BL.foldr' convert "" (BL.take ((fromIntegral len + 1) `div` 2) bin)
   convert w acc =
     (codeMap `B.index` fromIntegral (w `shiftR` 4))
       `BL.cons` (codeMap `B.index` fromIntegral (w .&. 0x0f))
@@ -190,7 +193,7 @@ pBlock refs = do
 
   return $ bin2code seqBytes l_seq
 
-parseBam :: Parser BL.ByteString
+parseBam :: Parser [BL.ByteString]
 parseBam = do
   _ <- string "BAM\x01"
   l_text <- pWord32le (Just "l_text")
@@ -205,12 +208,17 @@ parseBam = do
 
   eof
 
-  return ""
+  return blocks
+
+decodeBam ::
+  BL.ByteString -> (Either (ParseErrorBundle BL.ByteString Void) [BL.ByteString])
+decodeBam bam = do
+  parse parseBam "" bam
 
 extractBzgf ::
-  FilePath -> IO (Either (ParseErrorBundle BL.ByteString Void) BL.ByteString)
+  FilePath -> IO (Either (ParseErrorBundle BL.ByteString Void) [BL.ByteString])
 extractBzgf fp = do
   content <- BL.readFile fp
   return $ do
     bamData <- parse parseBzgf fp content
-    parse parseBam "" bamData
+    decodeBam bamData

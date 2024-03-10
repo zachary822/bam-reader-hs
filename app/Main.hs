@@ -2,6 +2,7 @@
 
 module Main where
 
+import Control.Monad
 import Data.Bam
 import Data.ByteString.Lazy qualified as BL
 import Options.Applicative
@@ -19,4 +20,4 @@ main = do
 
   thing <- extractBzgf file
 
-  print $ BL.length <$> thing
+  return ()

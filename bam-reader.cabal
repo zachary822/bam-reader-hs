@@ -131,4 +131,5 @@ test-suite bam-reader-test
     -- Test dependencies.
     build-depends:
         base ^>=4.19.1.0,
+        hspec,
         bam-reader
