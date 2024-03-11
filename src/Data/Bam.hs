@@ -37,7 +37,7 @@ pInt32le n = runGet getInt32le . BL.fromStrict <$> takeP n 4
 pFloatle :: Maybe String -> Parser Float
 pFloatle n = runGet getFloatle . BL.fromStrict <$> takeP n 4
 
-parseBzgfBlock :: Parser BL.ByteString
+parseBzgfBlock :: Parser ByteString
 parseBzgfBlock = do
   _ <- string "\x1f\x8b\x08\04" -- bzgf magic
   _ <- takeP Nothing 6
@@ -49,7 +49,7 @@ parseBzgfBlock = do
 
   bsize <- pWord16le (Just "BSIZE")
   deflate <-
-    decompress . BL.fromStrict
+    BL.toStrict . decompress . BL.fromStrict
       <$> takeP (Just "CDATA") (fromIntegral bsize - xlen - 19)
 
   crc <- pWord32le (Just "CRC32")
@@ -59,8 +59,8 @@ parseBzgfBlock = do
 
   return deflate
 
-parseBzgf :: Parser BL.ByteString
-parseBzgf = BL.concat <$> many parseBzgfBlock <* eof
+parseBzgf :: Parser ByteString
+parseBzgf = B.concat <$> many parseBzgfBlock <* eof
 
 pRef :: Parser Ref
 pRef = do
@@ -190,4 +190,4 @@ extractBzgf fp = do
   content <- B.readFile fp
   return $ do
     bamData <- parse parseBzgf fp content
-    decodeBam $ BL.toStrict bamData
+    decodeBam bamData
