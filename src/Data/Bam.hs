@@ -10,6 +10,8 @@ import Control.Monad
 import Data.Bam.Types
 import Data.Bam.Utils
 import Data.Binary.Get
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
 import Data.ByteString.Lazy qualified as BL
 import Data.Digest.CRC32
 import Data.Int
@@ -18,22 +20,22 @@ import Data.Word
 import Text.Megaparsec
 import Text.Megaparsec.Byte
 
-type Parser = Parsec Void BL.ByteString
+type Parser = Parsec Void ByteString
 
 pWord16le :: Maybe String -> Parser Word16
-pWord16le n = runGet (getWord16le) <$> takeP n 2
+pWord16le n = runGet (getWord16le) . BL.fromStrict <$> takeP n 2
 
 pInt16le :: Maybe String -> Parser Int16
-pInt16le n = runGet (getInt16le) <$> takeP n 2
+pInt16le n = runGet (getInt16le) . BL.fromStrict <$> takeP n 2
 
 pWord32le :: Maybe String -> Parser Word32
-pWord32le n = runGet getWord32le <$> takeP n 4
+pWord32le n = runGet getWord32le . BL.fromStrict <$> takeP n 4
 
 pInt32le :: Maybe String -> Parser Int32
-pInt32le n = runGet getInt32le <$> takeP n 4
+pInt32le n = runGet getInt32le . BL.fromStrict <$> takeP n 4
 
 pFloatle :: Maybe String -> Parser Float
-pFloatle n = runGet getFloatle <$> takeP n 4
+pFloatle n = runGet getFloatle . BL.fromStrict <$> takeP n 4
 
 parseBzgfBlock :: Parser BL.ByteString
 parseBzgfBlock = do
@@ -46,14 +48,16 @@ parseBzgfBlock = do
   _ <- string "BC\x02\x00"
 
   bsize <- pWord16le (Just "BSIZE")
-  deflate <- decompress <$> takeP (Just "CDATA") (fromIntegral bsize - xlen - 19)
+  deflate <-
+    decompress . BL.fromStrict
+      <$> takeP (Just "CDATA") (fromIntegral bsize - xlen - 19)
 
   crc <- pWord32le (Just "CRC32")
   unless (crc == crc32 deflate) (fail "CRC32 checksum mismatch")
 
   _ <- takeP Nothing 4
 
-  return $ deflate
+  return deflate
 
 parseBzgf :: Parser BL.ByteString
 parseBzgf = BL.concat <$> many parseBzgfBlock <* eof
@@ -66,7 +70,7 @@ pRef = do
 
   return (name, fromIntegral l_ref)
 
-pTag :: Parser (BL.ByteString, TagValue)
+pTag :: Parser (ByteString, TagValue)
 pTag = do
   tag <- takeP (Just "tag") 2
 
@@ -98,8 +102,8 @@ pTag = do
       t <- anySingle
       cnt <- fromIntegral <$> pWord32le Nothing
       case t of
-        99 -> Int8ListValue . fmap fromIntegral . BL.unpack <$> takeP Nothing cnt
-        67 -> Word8ListValue . fmap fromIntegral . BL.unpack <$> takeP Nothing cnt
+        99 -> Int8ListValue . fmap fromIntegral . B.unpack <$> takeP Nothing cnt
+        67 -> Word8ListValue . fmap fromIntegral . B.unpack <$> takeP Nothing cnt
         115 -> Int16ListValue <$> count cnt (pInt16le Nothing)
         83 -> Word16ListValue <$> count cnt (pWord16le Nothing)
         105 -> Int32ListValue <$> count cnt (pInt32le Nothing)
@@ -108,14 +112,14 @@ pTag = do
         _ -> fail "bad value type"
     _ -> fail "bad value type"
 
-pTags :: Int -> Parser [(BL.ByteString, TagValue)]
+pTags :: Int -> Parser [(ByteString, TagValue)]
 pTags end = do
   offset <- getOffset
   if (offset < end)
     then (:) <$> pTag <*> pTags end
     else return []
 
-pBlock :: Refs -> Parser BL.ByteString
+pBlock :: Refs -> Parser ByteString
 pBlock refs = do
   blockSize <- pWord32le (Just "block_size")
 
@@ -158,7 +162,7 @@ pBlock refs = do
 
   return code
 
-parseBam :: Parser [BL.ByteString]
+parseBam :: Parser [ByteString]
 parseBam = do
   _ <- string "BAM\x01"
   l_text <- pWord32le (Just "l_text")
@@ -176,14 +180,14 @@ parseBam = do
   return blocks
 
 decodeBam ::
-  BL.ByteString -> (Either (ParseErrorBundle BL.ByteString Void) [BL.ByteString])
+  ByteString -> (Either (ParseErrorBundle ByteString Void) [ByteString])
 decodeBam bam = do
   parse parseBam "" bam
 
 extractBzgf ::
-  FilePath -> IO (Either (ParseErrorBundle BL.ByteString Void) [BL.ByteString])
+  FilePath -> IO (Either (ParseErrorBundle ByteString Void) [ByteString])
 extractBzgf fp = do
-  content <- BL.readFile fp
+  content <- B.readFile fp
   return $ do
     bamData <- parse parseBzgf fp content
-    decodeBam bamData
+    decodeBam $ BL.toStrict bamData

@@ -1,6 +1,6 @@
 module Data.Bam.Types where
 
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString (ByteString)
 import Data.Int
 import Data.Word
 
