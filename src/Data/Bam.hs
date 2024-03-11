@@ -3,14 +3,13 @@
 
 module Data.Bam (
   extractBzgf,
-  bin2code,
 ) where
 
 import Codec.Compression.Zlib.Raw
 import Control.Monad
+import Data.Bam.Types
+import Data.Bam.Utils
 import Data.Binary.Get
-import Data.Bits
-import Data.ByteString qualified as B
 import Data.ByteString.Lazy qualified as BL
 import Data.Digest.CRC32
 import Data.Int
@@ -20,27 +19,6 @@ import Text.Megaparsec
 import Text.Megaparsec.Byte
 
 type Parser = Parsec Void BL.ByteString
-
-type Ref = (BL.ByteString, Integer)
-type Refs = [Ref]
-
-data TagValue
-  = Int8Value Int8
-  | Word8Value Word8
-  | Int16Value Int16
-  | Word16Value Word16
-  | Int32Value Int32
-  | Word32Value Word32
-  | FloatValue Float
-  | BSValue BL.ByteString
-  | Int8ListValue [Int8]
-  | Word8ListValue [Word8]
-  | Int16ListValue [Int16]
-  | Word16ListValue [Word16]
-  | Int32ListValue [Int32]
-  | Word32ListValue [Word32]
-  | FloatListValue [Float]
-  deriving (Show, Eq)
 
 pWord16le :: Maybe String -> Parser Word16
 pWord16le n = runGet (getWord16le) <$> takeP n 2
@@ -59,7 +37,7 @@ pFloatle n = runGet getFloatle <$> takeP n 4
 
 parseBzgfBlock :: Parser BL.ByteString
 parseBzgfBlock = do
-  _ <- string "\x1f\x8b\x08\04"
+  _ <- string "\x1f\x8b\x08\04" -- bzgf magic
   _ <- takeP Nothing 6
 
   xlen <- fromIntegral <$> pWord16le (Just "XLEN")
@@ -132,31 +110,16 @@ pTag = do
 
 pTags :: Int -> Parser [(BL.ByteString, TagValue)]
 pTags end = do
-  tag <- pTag
-
   offset <- getOffset
-
-  if (offset >= end)
-    then (return [tag])
-    else (tag :) <$> (pTags end)
-
-codeMap :: B.ByteString
-codeMap = "=ACMGRSVTWYHKDBN"
-
-bin2code :: (Integral a) => BL.ByteString -> a -> BL.ByteString
-bin2code bin len = BL.take (fromIntegral len) code
- where
-  code = BL.foldr' convert "" (BL.take ((fromIntegral len + 1) `div` 2) bin)
-  convert w acc =
-    (codeMap `B.index` fromIntegral (w `shiftR` 4))
-      `BL.cons` (codeMap `B.index` fromIntegral (w .&. 0x0f))
-      `BL.cons` acc
+  if (offset < end)
+    then (:) <$> pTag <*> pTags end
+    else return []
 
 pBlock :: Refs -> Parser BL.ByteString
 pBlock refs = do
   blockSize <- pWord32le (Just "block_size")
 
-  refId <- pInt32le (Just "refID")
+  ref <- (refs !!) . fromIntegral <$> pInt32le (Just "refID")
 
   pos <- pInt32le (Just "pos")
 
@@ -173,9 +136,11 @@ pBlock refs = do
   next_pos <- pInt32le (Just "next_pos")
   tlen <- pInt32le (Just "tlen")
   read_name <- takeP (Just "read_name") (fromIntegral l_read_name)
-  cigar <- count (fromIntegral n_cigar_op) (pWord32le (Just "cigar"))
-  seqBytes <- takeP (Just "seq") ((fromIntegral l_seq + 1) `div` 2)
-  qual <- takeP (Just "qual") (fromIntegral l_seq)
+  cigar <-
+    cigarToPrintable <$> count (fromIntegral n_cigar_op) (pWord32le (Just "cigar"))
+  code <-
+    (`bin2code` l_seq) <$> takeP (Just "seq") ((fromIntegral l_seq + 1) `div` 2)
+  qual <- qualToPrintable <$> takeP (Just "qual") (fromIntegral l_seq)
 
   start <- getOffset
 
@@ -191,7 +156,7 @@ pBlock refs = do
 
   tags <- pTags end
 
-  return $ bin2code seqBytes l_seq
+  return code
 
 parseBam :: Parser [BL.ByteString]
 parseBam = do

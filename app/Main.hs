@@ -2,9 +2,8 @@
 
 module Main where
 
-import Control.Monad
+import Control.Exception
 import Data.Bam
-import Data.ByteString.Lazy qualified as BL
 import Options.Applicative
 
 data BamConfigs = BamConfigs
@@ -19,5 +18,7 @@ main = do
   BamConfigs{..} <- execParser $ info (parser <**> helper) fullDesc
 
   thing <- extractBzgf file
+
+  _ <- evaluate thing
 
   return ()

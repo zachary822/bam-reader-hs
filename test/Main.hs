@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Data.Bam
+import Data.Bam.Utils
 import Test.Hspec
 
 main :: IO ()

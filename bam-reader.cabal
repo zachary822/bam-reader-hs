@@ -59,7 +59,9 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Data.Bam
+    exposed-modules:  Data.Bam,
+                      Data.Bam.Utils,
+                      Data.Bam.Types
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -98,7 +100,6 @@ executable bam-reader
     build-depends:
         base ^>=4.19.1.0,
         optparse-applicative,
-        bytestring,
         bam-reader
 
     -- Directories containing source files.
