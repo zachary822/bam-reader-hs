@@ -9,7 +9,6 @@ import Codec.Compression.Zlib.Raw
 import Control.Monad
 import Data.Bam.Types
 import Data.Bam.Utils
-import Data.Binary.Get
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.ByteString.Lazy qualified as BL
@@ -17,6 +16,7 @@ import Data.Digest.CRC32
 import Data.Void
 import Data.Word
 import Debug.Trace
+import GHC.Float
 import Text.Megaparsec
 import Text.Megaparsec.Byte
 import Text.Megaparsec.Byte.Binary
@@ -24,8 +24,7 @@ import Text.Megaparsec.Byte.Binary
 type Parser = Parsec Void ByteString
 
 floatle :: Parser Float
-floatle = do
-  runGet (getFloatle) . BL.fromStrict <$> takeP (Just "32-bit floating point") 4
+floatle = castWord32ToFloat <$> word32le
 
 parseBzgfBlock :: Parser ByteString
 parseBzgfBlock = do
