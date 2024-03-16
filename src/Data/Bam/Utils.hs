@@ -5,7 +5,8 @@ module Data.Bam.Utils where
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
-import Data.ByteString.Char8 qualified as C8
+import Data.ByteString.Builder qualified as B
+import Data.ByteString.Lazy qualified as BL
 import Data.Foldable
 import Data.Word
 
@@ -32,5 +33,5 @@ cigarToPrintable bin = foldl' convert "" bin
  where
   convert acc w =
     acc
-      <> (C8.pack . show) (w `shiftR` 4)
+      <> (BL.toStrict . B.toLazyByteString . B.word32Dec) (w `shiftR` 4)
       `B.snoc` (cigarMap `B.index` fromIntegral (w .&. 0x0f))
